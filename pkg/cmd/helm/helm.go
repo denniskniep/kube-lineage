@@ -18,13 +18,14 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/klog/v2"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
-	"k8s.io/kubectl/pkg/util"
 	"k8s.io/kubectl/pkg/util/templates"
 
 	"github.com/tohjustin/kube-lineage/internal/client"
 	"github.com/tohjustin/kube-lineage/internal/graph"
 	"github.com/tohjustin/kube-lineage/internal/log"
 	lineageprinters "github.com/tohjustin/kube-lineage/internal/printers"
+
+	utilcomp "k8s.io/kubectl/pkg/util/completion"
 )
 
 var (
@@ -81,7 +82,7 @@ func NewCmd(streams genericclioptions.IOStreams, name, parentCmdPath string) *co
 	}
 
 	f := cmdutil.NewFactory(o.ClientFlags)
-	util.SetFactoryForCompletion(f)
+	utilcomp.SetFactoryForCompletion(f)
 
 	if len(name) > 0 {
 		cmdName = name
@@ -187,6 +188,7 @@ func (o *CmdOptions) Validate() error {
 }
 
 // Run implements all the necessary functionality for the helm command.
+//
 //nolint:funlen,gocognit,gocyclo
 func (o *CmdOptions) Run() error {
 	ctx := context.Background()
