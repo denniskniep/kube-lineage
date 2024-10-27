@@ -616,42 +616,42 @@ func resolveDeps(m meta.RESTMapper, objects []unstructuredv1.Unstructured, uids 
 		case node.Group == rbacv1.GroupName && node.Kind == "Role":
 			rmap, err = getRoleRelationships(node)
 			if err != nil {
-				klog.V(4).Infof("Failed to get relationships for role named \"%s\" in namespace \"%s\": %s: %s", node.Name, node.Namespace, err)
+				klog.V(4).Infof("Failed to get relationships for role named \"%s\" in namespace \"%s\": %s", node.Name, node.Namespace, err)
 				continue
 			}
 		// Populate dependencies & dependents based on RoleBinding relationships
 		case node.Group == rbacv1.GroupName && node.Kind == "RoleBinding":
 			rmap, err = getRoleBindingRelationships(node)
 			if err != nil {
-				klog.V(4).Infof("Failed to get relationships for rolebinding named \"%s\" in namespace \"%s\": %s: %s", node.Name, node.Namespace, err)
+				klog.V(4).Infof("Failed to get relationships for rolebinding named \"%s\" in namespace \"%s\": %s", node.Name, node.Namespace, err)
 				continue
 			}
 		// Populate dependencies & dependents based on CSIStorageCapacity relationships
 		case node.Group == storagev1beta1.GroupName && node.Kind == "CSIStorageCapacity":
 			rmap, err = getCSIStorageCapacityRelationships(node)
 			if err != nil {
-				klog.V(4).Infof("Failed to get relationships for csistoragecapacity named \"%s\": %s: %s", node.Name, err)
+				klog.V(4).Infof("Failed to get relationships for csistoragecapacity named \"%s\": %s", node.Name, err)
 				continue
 			}
 		// Populate dependencies & dependents based on CSINode relationships
 		case node.Group == storagev1.GroupName && node.Kind == "CSINode":
 			rmap, err = getCSINodeRelationships(node)
 			if err != nil {
-				klog.V(4).Infof("Failed to get relationships for csinode named \"%s\": %s: %s", node.Name, err)
+				klog.V(4).Infof("Failed to get relationships for csinode named \"%s\": %s", node.Name, err)
 				continue
 			}
 		// Populate dependencies & dependents based on StorageClass relationships
 		case node.Group == storagev1.GroupName && node.Kind == "StorageClass":
 			rmap, err = getStorageClassRelationships(node)
 			if err != nil {
-				klog.V(4).Infof("Failed to get relationships for storageclass named \"%s\": %s: %s", node.Name, err)
+				klog.V(4).Infof("Failed to get relationships for storageclass named \"%s\": %s", node.Name, err)
 				continue
 			}
 		// Populate dependencies & dependents based on VolumeAttachment relationships
 		case node.Group == storagev1.GroupName && node.Kind == "VolumeAttachment":
 			rmap, err = getVolumeAttachmentRelationships(node)
 			if err != nil {
-				klog.V(4).Infof("Failed to get relationships for volumeattachment named \"%s\": %s: %s", node.Name, err)
+				klog.V(4).Infof("Failed to get relationships for volumeattachment named \"%s\": %s", node.Name, err)
 				continue
 			}
 		default:
