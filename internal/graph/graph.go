@@ -11,7 +11,6 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	nodev1 "k8s.io/api/node/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
@@ -31,15 +30,30 @@ type ObjectLabelSelectorKey string
 
 // ObjectLabelSelector is a reference to a collection of Kubernetes objects.
 type ObjectLabelSelector struct {
-	Group     string
-	Kind      string
-	Namespace string
+	Group     *string
+	Kind      *string
+	Namespace *string
 	Selector  labels.Selector
 }
 
 // Key converts the ObjectLabelSelector into a ObjectLabelSelectorKey.
 func (o *ObjectLabelSelector) Key() ObjectLabelSelectorKey {
-	k := fmt.Sprintf("%s\\%s\\%s\\%s", o.Group, o.Kind, o.Namespace, o.Selector)
+	group := ""
+	if o.Group != nil {
+		group = *o.Group
+	}
+
+	kind := ""
+	if o.Kind != nil {
+		kind = *o.Kind
+	}
+
+	namespace := ""
+	if o.Namespace != nil {
+		namespace = *o.Namespace
+	}
+
+	k := fmt.Sprintf("%s\\%s\\%s\\%s", group, kind, namespace, o.Selector)
 	return ObjectLabelSelectorKey(k)
 }
 
@@ -305,6 +319,7 @@ func ResolveDependents(m meta.RESTMapper, objects []unstructuredv1.Unstructured,
 
 // resolveDeps resolves all dependencies or dependents of the provided objects
 // and returns a relationship tree.
+//
 //nolint:funlen,gocognit,gocyclo
 func resolveDeps(m meta.RESTMapper, objects []unstructuredv1.Unstructured, uids []types.UID, depsIsDependencies bool) (NodeMap, error) {
 	if len(uids) == 0 {
@@ -361,7 +376,7 @@ func resolveDeps(m meta.RESTMapper, objects []unstructuredv1.Unstructured, uids 
 	resolveLabelSelectorToNodes := func(o ObjectLabelSelector) []*Node {
 		var result []*Node
 		for _, n := range globalMapByUID {
-			if n.Group == o.Group && n.Kind == o.Kind && n.Namespace == o.Namespace {
+			if (o.Group == nil || n.Group == *o.Group) && (o.Kind == nil || n.Kind == *o.Kind) && (o.Namespace == nil || n.Namespace == *o.Namespace) {
 				if ok := o.Selector.Matches(labels.Set(n.GetLabels())); ok {
 					result = append(result, n)
 				}
@@ -473,6 +488,18 @@ func resolveDeps(m meta.RESTMapper, objects []unstructuredv1.Unstructured, uids 
 	var err error
 	for _, node := range globalMapByUID {
 		switch {
+		case node.Group == "kustomize.toolkit.fluxcd.io" && node.Kind == "Kustomization":
+			rmap, err = getKustomizationRelationships(node)
+			if err != nil {
+				klog.V(4).Infof("Failed to get relationships for kustomization named \"%s\": %s", node.Name, err)
+				continue
+			}
+		case node.Group == "helm.toolkit.fluxcd.io" && node.Kind == "HelmRelease":
+			rmap, err = getHelmReleaseRelationships(node)
+			if err != nil {
+				klog.V(4).Infof("Failed to get relationships for helmrelease named \"%s\": %s", node.Name, err)
+				continue
+			}
 		// Populate dependencies & dependents based on PersistentVolume relationships
 		case node.Group == corev1.GroupName && node.Kind == "PersistentVolume":
 			rmap, err = getPersistentVolumeRelationships(node)
@@ -506,13 +533,6 @@ func resolveDeps(m meta.RESTMapper, objects []unstructuredv1.Unstructured, uids 
 			rmap, err = getServiceAccountRelationships(node)
 			if err != nil {
 				klog.V(4).Infof("Failed to get relationships for serviceaccount named \"%s\" in namespace \"%s\": %s", node.Name, node.Namespace, err)
-				continue
-			}
-		// Populate dependencies & dependents based on PodSecurityPolicy relationships
-		case node.Group == policyv1beta1.GroupName && node.Kind == "PodSecurityPolicy":
-			rmap, err = getPodSecurityPolicyRelationships(node)
-			if err != nil {
-				klog.V(4).Infof("Failed to get relationships for podsecuritypolicy named \"%s\": %s", node.Name, err)
 				continue
 			}
 		// Populate dependencies & dependents based on PodDisruptionBudget relationships

@@ -3,6 +3,8 @@ package graph
 import (
 	"strings"
 
+	fluxhelmv2 "github.com/fluxcd/helm-controller/api/v2"
+	fluxkustomizev1 "github.com/fluxcd/kustomize-controller/api/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
@@ -68,6 +70,12 @@ const (
 
 	// Kubernetes RelationshipNetworkPolicy relationships.
 	RelationshipNetworkPolicy Relationship = "NetworkPolicy"
+
+	// Flux Kustomization relationships.
+	RelationshipFluxKustomization Relationship = "FluxKustomization"
+
+	// Flux HelmRelease relationships.
+	RelationshipFluxHelmRelease Relationship = "FluxHelmRelease"
 
 	// Kubernetes Owner-Dependent relationships.
 	RelationshipControllerRef Relationship = "ControllerReference"
@@ -166,7 +174,11 @@ func getClusterRoleRelationships(n *Node) (*RelationshipMap, error) {
 			if err != nil {
 				return nil, err
 			}
-			ols = ObjectLabelSelector{Group: rbacv1.GroupName, Kind: "ClusterRole", Selector: selector}
+			group := rbacv1.GroupName
+			kind := "ClusterRole"
+			namespace := ""
+
+			ols = ObjectLabelSelector{Group: &group, Kind: &kind, Namespace: &namespace, Selector: selector}
 			result.AddDependencyByLabelSelector(ols, RelationshipClusterRoleAggregationRule)
 		}
 	}
@@ -193,6 +205,7 @@ func getClusterRoleRelationships(n *Node) (*RelationshipMap, error) {
 // getClusterRoleBindingRelationships returns a map of relationships that this
 // ClusterRoleBinding has with other objects, based on what was referenced in
 // its manifest.
+//
 //nolint:gocognit
 func getClusterRoleBindingRelationships(n *Node) (*RelationshipMap, error) {
 	var crb rbacv1.ClusterRoleBinding
@@ -297,6 +310,7 @@ func getCSIStorageCapacityRelationships(n *Node) (*RelationshipMap, error) {
 
 // getEventRelationships returns a map of relationships that this Event has with
 // other objects, based on what was referenced in its manifest.
+//
 //nolint:unparam
 func getEventRelationships(n *Node) (*RelationshipMap, error) {
 	result := newRelationshipMap()
@@ -319,6 +333,7 @@ func getEventRelationships(n *Node) (*RelationshipMap, error) {
 
 // getIngressRelationships returns a map of relationships that this Ingress has
 // with other objects, based on what was referenced in its manifest.
+//
 //nolint:funlen,gocognit
 func getIngressRelationships(n *Node) (*RelationshipMap, error) {
 	var ref ObjectReference
@@ -495,8 +510,66 @@ func getNetworkPolicyRelationships(n *Node) (*RelationshipMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	ols = ObjectLabelSelector{Kind: "Pod", Namespace: ns, Selector: selector}
+	group := ""
+	kind := "Pod"
+	namespace := ns
+
+	ols = ObjectLabelSelector{Group: &group, Kind: &kind, Namespace: &namespace, Selector: selector}
 	result.AddDependencyByLabelSelector(ols, RelationshipNetworkPolicy)
+
+	return &result, nil
+}
+
+func getKustomizationRelationships(n *Node) (*RelationshipMap, error) {
+	var obj fluxkustomizev1.Kustomization
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(n.UnstructuredContent(), &obj)
+	if err != nil {
+		return nil, err
+	}
+
+	var ols ObjectLabelSelector
+	result := newRelationshipMap()
+
+	labelSelector := metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"kustomize.toolkit.fluxcd.io/name":      obj.Name,
+			"kustomize.toolkit.fluxcd.io/namespace": obj.Namespace,
+		},
+	}
+
+	selector, err := metav1.LabelSelectorAsSelector(&labelSelector)
+	if err != nil {
+		return nil, err
+	}
+	ols = ObjectLabelSelector{Selector: selector}
+	result.AddDependentByLabelSelector(ols, RelationshipFluxKustomization)
+
+	return &result, nil
+}
+
+func getHelmReleaseRelationships(n *Node) (*RelationshipMap, error) {
+	var obj fluxhelmv2.HelmRelease
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(n.UnstructuredContent(), &obj)
+	if err != nil {
+		return nil, err
+	}
+
+	var ols ObjectLabelSelector
+	result := newRelationshipMap()
+
+	labelSelector := metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"helm.toolkit.fluxcd.io/name":      obj.Name,
+			"helm.toolkit.fluxcd.io/namespace": obj.Namespace,
+		},
+	}
+
+	selector, err := metav1.LabelSelectorAsSelector(&labelSelector)
+	if err != nil {
+		return nil, err
+	}
+	ols = ObjectLabelSelector{Selector: selector}
+	result.AddDependentByLabelSelector(ols, RelationshipHelmRelease)
 
 	return &result, nil
 }
@@ -582,6 +655,7 @@ func getPersistentVolumeClaimRelationships(n *Node) (*RelationshipMap, error) {
 
 // getPodRelationships returns a map of relationships that this Pod has with
 // other objects, based on what was referenced in its manifest.
+//
 //nolint:funlen,gocognit
 func getPodRelationships(n *Node) (*RelationshipMap, error) {
 	var pod corev1.Pod
@@ -718,43 +792,13 @@ func getPodDisruptionBudgetRelationships(n *Node) (*RelationshipMap, error) {
 		if err != nil {
 			return nil, err
 		}
-		ols = ObjectLabelSelector{Kind: "Pod", Namespace: ns, Selector: selector}
+
+		group := ""
+		kind := "Pod"
+		namespace := ns
+
+		ols = ObjectLabelSelector{Group: &group, Kind: &kind, Namespace: &namespace, Selector: selector}
 		result.AddDependencyByLabelSelector(ols, RelationshipPodDisruptionBudget)
-	}
-
-	return &result, nil
-}
-
-// getPodSecurityPolicyRelationships returns a map of relationships that this
-// PodSecurityPolicy has with other objects, based on what was referenced in its
-// manifest.
-func getPodSecurityPolicyRelationships(n *Node) (*RelationshipMap, error) {
-	var psp policyv1beta1.PodSecurityPolicy
-	err := runtime.DefaultUnstructuredConverter.FromUnstructured(n.UnstructuredContent(), &psp)
-	if err != nil {
-		return nil, err
-	}
-
-	var ref ObjectReference
-	result := newRelationshipMap()
-
-	// RelationshipPodSecurityPolicyAllowedCSIDriver
-	for _, csi := range psp.Spec.AllowedCSIDrivers {
-		ref = ObjectReference{Group: storagev1.GroupName, Kind: "CSIDriver", Name: csi.Name}
-		result.AddDependencyByKey(ref.Key(), RelationshipPodSecurityPolicyAllowedCSIDriver)
-	}
-	if rc := psp.Spec.RuntimeClass; rc != nil {
-		// RelationshipPodSecurityPolicyAllowedRuntimeClass
-		for _, n := range psp.Spec.RuntimeClass.AllowedRuntimeClassNames {
-			ref = ObjectReference{Group: nodev1.GroupName, Kind: "RuntimeClass", Name: n}
-			result.AddDependencyByKey(ref.Key(), RelationshipPodSecurityPolicyAllowedRuntimeClass)
-		}
-
-		// RelationshipPodSecurityPolicyDefaultRuntimeClass
-		if n := psp.Spec.RuntimeClass.DefaultRuntimeClassName; n != nil {
-			ref = ObjectReference{Group: nodev1.GroupName, Kind: "RuntimeClass", Name: *n}
-			result.AddDependencyByKey(ref.Key(), RelationshipPodSecurityPolicyDefaultRuntimeClass)
-		}
 	}
 
 	return &result, nil
@@ -795,6 +839,7 @@ func getRoleRelationships(n *Node) (*RelationshipMap, error) {
 // getRoleBindingRelationships returns a map of relationships that this
 // RoleBinding has with other objects, based on what was referenced in its
 // manifest.
+//
 //nolint:funlen,gocognit
 func getRoleBindingRelationships(n *Node) (*RelationshipMap, error) {
 	var rb rbacv1.RoleBinding
@@ -879,7 +924,13 @@ func getRuntimeClassRelationships(n *Node) (*RelationshipMap, error) {
 		if err != nil {
 			return nil, err
 		}
-		ols = ObjectLabelSelector{Kind: "Node", Selector: selector}
+
+		group := ""
+		kind := "Node"
+		namespace := ""
+
+		ols = ObjectLabelSelector{Group: &group, Kind: &kind, Namespace: &namespace, Selector: selector}
+
 		result.AddDependencyByLabelSelector(ols, RelationshipRuntimeClass)
 	}
 
@@ -905,7 +956,13 @@ func getServiceRelationships(n *Node) (*RelationshipMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	ols = ObjectLabelSelector{Kind: "Pod", Namespace: ns, Selector: selector}
+
+	group := ""
+	kind := "Pod"
+	namespace := ns
+
+	ols = ObjectLabelSelector{Group: &group, Kind: &kind, Namespace: &namespace, Selector: selector}
+
 	result.AddDependencyByLabelSelector(ols, RelationshipService)
 
 	return &result, nil
@@ -989,6 +1046,7 @@ func getValidatingWebhookConfigurationRelationships(n *Node) (*RelationshipMap, 
 // getVolumeAttachmentRelationships returns a map of relationships that this
 // VolumeAttachment has with other objects, based on what was referenced in its
 // manifest.
+//
 //nolint:funlen,nestif
 func getVolumeAttachmentRelationships(n *Node) (*RelationshipMap, error) {
 	var va storagev1.VolumeAttachment
