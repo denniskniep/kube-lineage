@@ -1,6 +1,6 @@
 module github.com/tohjustin/kube-lineage
 
-go 1.23.2
+go 1.23
 
 require (
 	github.com/fluxcd/helm-controller/api v1.1.0
